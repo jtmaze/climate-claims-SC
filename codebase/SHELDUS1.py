@@ -13,6 +13,8 @@ import numpy as np
 import os
 import geopandas as gpd
 import matplotlib.pyplot as plt
+from matplotlib.colors import Normalize
+from matplotlib.colors import LogNorm
 
 
 os.chdir("/Users/jmaze/Documents/geog590/")
@@ -85,6 +87,7 @@ plt.show()
 # %% 4.1 Exclude Hurricane Hugo's impact
 
 claims2 = claims[claims['EventName'] != "Hurricane 1989 Hugo"]
+claims_noHugo = claims2.copy()
 
 df2 = claims2.groupby('Year').agg({
     'PropertyDmg(ADJ)': 'sum',
@@ -126,9 +129,9 @@ fig.supylabel('Claims (Millions of Dollars)', fontsize=16)
 plt.tight_layout()
 plt.show()
 
-# %% 5.0 Recatagorize the Hazard types 69 is too many
+del claims2, claims3, df2, df3
 
-claims_noHugo = claims2.copy()
+# %% 5.0 Recatagorize the Hazard types 69 is too many
 
 def hazard_broad_reclass(hazard):
     if 'Winter Weather' in hazard:
@@ -188,7 +191,7 @@ axs[1, 0].set_title('Hurricane and Tropical Storm Damages')
 
 axs[1, 1].hist(generalstorms['PropertyDmg(ADJ)']/1e6, bins=70, alpha = 0.7, color=colors[3], edgecolor='black')
 axs[1, 1].set_yscale('log')
-axs[1, 1].set_title('General Storms Damages')
+axs[1, 1].set_title('General Storm Damages')
 
 x_limits = [0, max(claims_noHugo['PropertyDmg(ADJ)']) / 1e6]
 for ax in axs.flat:
@@ -199,6 +202,7 @@ fig.supylabel('Occurances of claims (log scale)')
 
 plt.tight_layout()
 plt.show()
+
 
 # %% 6.1 Will the plots look better if the x-axis is rescaled log?
 
@@ -233,7 +237,7 @@ plt.show()
 # plt.tight_layout()
 # plt.show()
 
-# %% Read in county shapefiles to make data geospatial
+# %% 7.0 Read in county shapefiles to make data geospatial
 
 counties = gpd.read_file('./project_data/county_shapefiles/tl_2021_us_county.shp')
 counties = counties.query("STATEFP == '45'")
@@ -250,25 +254,193 @@ claims_gdf = pd.merge(
 
 claims_gdf = claims_gdf.set_geometry('geometry')
 
-# %%
+# %% 8.0 Make Chloropleth for all claims ex-Hugo per capita
 
-gdf1 = claims_gdf.groupby('County_FIPS').agg({
-    'PropertyDmg(ADJ)': 'sum',
+gdf_temp = claims_gdf.groupby('County_FIPS').agg({
+    'PropertyDmgPerCapita': 'sum',
     'CountyName': 'first',
     'geometry': 'first'
 }).reset_index()
 
 
-gdf1 = gdf1.set_geometry('geometry')
-gdf1 = gdf1.set_crs(counties.crs)
+gdf_temp = gdf_temp.set_geometry('geometry')
+gdf_temp = gdf_temp.set_crs(counties.crs)
 
 fig, ax = plt.subplots(1, 1, figsize=(15, 20))
 
-gdf1.plot(column='PropertyDmg(ADJ)', ax=ax, cmap='OrRd')
+gdf_temp.plot(column='PropertyDmgPerCapita', ax=ax, cmap='coolwarm', edgecolor='black')
+
+cax = fig.add_axes([0.25, 0.2, 0.5, 0.03])
+sm = plt.cm.ScalarMappable(
+    cmap='coolwarm', 
+    norm=plt.Normalize(vmin=gdf_temp['PropertyDmgPerCapita'].min(), 
+                       vmax=gdf_temp['PropertyDmgPerCapita'].max()
+                       )
+    )
+
+sm._A = []
+cbar = fig.colorbar(sm, cax=cax, orientation='horizontal')
+cbar.set_label('Inflation adjusted dollars ($)', fontsize=18)
+ax.set_title('All natural disaster claims (ex-Hugo) per-capita for SC 1960-2022', fontsize=24)
+ax.set_xlabel('Longitude')
+ax.set_ylabel('Latitude')
 
 plt.show()
 
+del gdf_temp
 
+# %% 8.1 Compare the per-capita claims (1960-1991 vs 1992-2022)
+
+gdf_temp1 = claims_gdf[claims_gdf['Year'] < 1991]
+
+gdf_temp1 = gdf_temp1.groupby('County_FIPS').agg({
+    'PropertyDmgPerCapita': 'sum',
+    'CountyName': 'first',
+    'geometry': 'first'
+}).reset_index()
+
+gdf_temp1 = gdf_temp1.set_geometry('geometry')
+gdf_temp1 = gdf_temp1.set_crs(counties.crs)
+
+gdf_temp2 = claims_gdf[claims_gdf['Year'] > 1992]
+gdf_temp2 = gdf_temp2.groupby('County_FIPS').agg({
+    'PropertyDmgPerCapita': 'sum',
+    'CountyName': 'first',
+    'geometry': 'first'
+}).reset_index()
+
+gdf_temp2 = gdf_temp2.set_geometry('geometry')
+gdf_temp2 = gdf_temp2.set_crs(counties.crs)
+
+
+# Make the comparison plot
+fig, axs = plt.subplots(1, 2, figsize=(16, 14))
+
+vmin = min(gdf_temp1['PropertyDmgPerCapita'].min(), gdf_temp2['PropertyDmgPerCapita'].min())
+vmax = max(gdf_temp1['PropertyDmgPerCapita'].max(), gdf_temp2['PropertyDmgPerCapita'].max())
+norm = Normalize(vmin=vmin, vmax=vmax)
+
+
+# Plotting the GeoDataFrames on the respective axes
+gdf_temp1.plot(column='PropertyDmgPerCapita', ax=axs[0], cmap='coolwarm', edgecolor='black', norm=norm)
+gdf_temp2.plot(column='PropertyDmgPerCapita', ax=axs[1], cmap='coolwarm', edgecolor='black', norm=norm)
+
+# Adding titles to the subplots
+axs[0].set_title('Inflation Adjusted Property Damage Per Capita (Before 1991)', fontsize=14)
+axs[1].set_title('Inflation Adjusted Property Damage Per Capita (After 1992)', fontsize=14)
+
+# Add a color bar 
+cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap='coolwarm'), 
+                    ax=axs, 
+                    orientation='horizontal', 
+                    fraction=0.05, 
+                    pad=0.1
+)
+cbar.set_label('Inflation adjusted dollars ($)', fontsize=16)
+
+# Adding axis titles
+axs[0].set_xlabel('Longitude')
+axs[0].set_ylabel('Latitude')
+axs[1].set_xlabel('Longitude')
+axs[1].set_ylabel('Latitude')
+
+plt.show()
+
+del gdf_temp1, gdf_temp2
+
+# %% 8.2 Make Chloropleth map for Storm Damage Per Capita
+
+gdf_temp = claims_gdf[claims_gdf['hazard_broad'] == 'GeneralStorm']
+
+gdf_temp = gdf_temp.groupby('County_FIPS').agg({
+    'PropertyDmgPerCapita': 'sum',
+    'CountyName': 'first',
+    'geometry': 'first'
+}).reset_index()
+
+gdf_temp = gdf_temp.set_geometry('geometry')
+gdf_temp = gdf_temp.set_crs(counties.crs)
+
+
+fig, ax = plt.subplots(1, 1, figsize=(15, 20))
+
+gdf_temp.plot(column='PropertyDmgPerCapita', ax=ax, cmap='coolwarm', edgecolor='black')
+
+cax = fig.add_axes([0.25, 0.2, 0.5, 0.03])
+sm = plt.cm.ScalarMappable(
+    cmap='coolwarm', 
+    norm=Normalize(vmin=gdf_temp['PropertyDmgPerCapita'].min(), 
+                   vmax=gdf_temp['PropertyDmgPerCapita'].max()
+                   )
+    )
+
+sm._A = []
+cbar = fig.colorbar(sm, cax=cax, orientation='horizontal')
+cbar.set_label('Inflation adjusted dollars ($)', fontsize=16)
+ax.set_title('Per Capita General Storm Damages (inflation adjusted) for SC 1960-2022', fontsize=22)
+ax.set_xlabel('Longitude')
+ax.set_ylabel('Latitude')
+
+plt.show()
+
+# %% 8.3 Storm Damage per-capita map
+
+gdf_temp = claims_gdf[claims_gdf['hazard_broad'] == 'GeneralStorm']
+
+gdf_temp1 = gdf_temp[gdf_temp['Year'] < 1991]
+
+gdf_temp1 = gdf_temp1.groupby('County_FIPS').agg({
+    'PropertyDmgPerCapita': 'sum',
+    'CountyName': 'first',
+    'geometry': 'first'
+}).reset_index()
+
+gdf_temp1 = gdf_temp1.set_geometry('geometry')
+gdf_temp1 = gdf_temp1.set_crs(counties.crs)
+
+gdf_temp2 = gdf_temp[gdf_temp['Year'] > 1992]
+gdf_temp2 = gdf_temp2.groupby('County_FIPS').agg({
+    'PropertyDmgPerCapita': 'sum',
+    'CountyName': 'first',
+    'geometry': 'first'
+}).reset_index()
+
+gdf_temp2 = gdf_temp2.set_geometry('geometry')
+gdf_temp2 = gdf_temp2.set_crs(counties.crs)
+
+
+# Make the comparison plot
+fig, axs = plt.subplots(1, 2, figsize=(16, 14))
+
+vmin = min(gdf_temp1['PropertyDmgPerCapita'].min(), gdf_temp2['PropertyDmgPerCapita'].min())
+vmax = max(gdf_temp1['PropertyDmgPerCapita'].max(), gdf_temp2['PropertyDmgPerCapita'].max())
+norm = Normalize(vmin=vmin, vmax=vmax)
+
+
+# Plotting the GeoDataFrames on the respective axes
+gdf_temp1.plot(column='PropertyDmgPerCapita', ax=axs[0], cmap='coolwarm', edgecolor='black', norm=norm)
+gdf_temp2.plot(column='PropertyDmgPerCapita', ax=axs[1], cmap='coolwarm', edgecolor='black', norm=norm)
+
+# Adding titles to the subplots
+axs[0].set_title('Per Capita General Storm Damages (inflation adjusted) for SC 1960-1991', fontsize=12)
+axs[1].set_title('Per Capita General Storm Damages (inflation adjusted) for SC 1992-2022', fontsize=12)
+
+# Add a color bar 
+cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap='coolwarm'), 
+                    ax=axs, 
+                    orientation='horizontal', 
+                    fraction=0.05, 
+                    pad=0.1
+)
+cbar.set_label('Inflation adjusted dollars ($)', fontsize=14)
+
+# Adding axis titles
+axs[0].set_xlabel('Longitude')
+axs[0].set_ylabel('Latitude')
+axs[1].set_xlabel('Longitude')
+axs[1].set_ylabel('Latitude')
+
+plt.show()
 
 
 
