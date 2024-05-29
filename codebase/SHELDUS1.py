@@ -12,10 +12,10 @@ import pandas as pd
 import numpy as np
 import os
 import geopandas as gpd
-import matplotlib.pyplot as plt
-from matplotlib.colors import Normalize
-from matplotlib.colors import LogNorm
 
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+from matplotlib.colors import Normalize
 
 os.chdir("/Users/jmaze/Documents/geog590/")
 
@@ -35,7 +35,7 @@ claims.drop(columns=drop_cols, inplace=True)
 claims.rename(columns={' Hazard': 'Hazard', ' CountyName': 'CountyName'}, inplace=True)
 
 # For the purpose of this project we'll ignore landslides. Those are predominately 
-# geologic, not climate. 
+# geologic, not climate. Also, not common in SC.
 claims = claims[claims['Hazard'] != 'Landslide']
 
 # Some claims amounts are $0, this is useless for many analyses
@@ -43,7 +43,7 @@ claims = claims[claims['PropertyDmg(ADJ)'] > 0]
 
 claims.head()
 
-# %% 3.0 Explore the data
+# %% 3.0 Enumerate worst events
 
 hazard_types = claims['Hazard'].unique().tolist()
 event_names = claims['EventName'].unique().tolist()
@@ -69,7 +69,7 @@ worst_events = worst_events.drop(columns=['PropertyDmg(ADJ)'])
 
 worst_events.round(2).head()
 
-
+del worst_events
 # %% 4.0 Plot the claims timeseries
 
 df = claims.groupby('Year').agg({
@@ -129,20 +129,21 @@ fig.supylabel('Claims (Millions of Dollars)', fontsize=16)
 plt.tight_layout()
 plt.show()
 
-del claims2, claims3, df2, df3
+del claims2, claims3, df, df2, df3
 
-# %% 5.0 Recatagorize the Hazard types 69 is too many
+# %% 5.0 Recatagorize the Hazard types
 
 def hazard_broad_reclass(hazard):
+    # 1. Winter Weather (e.g. Ice Storms) also includes some storm damage in neighboring counties.
     if 'Winter Weather' in hazard:
         return "WinterWeather"
-    
+    # 2. Heat, Drought and Wildfire
     if 'Heat' in hazard or 'Drought' in hazard or 'Wildfire' in hazard:
         return "Drought/Heat/Wildfire"
-    
+    # 3. Hurricanes and Tropical Storms
     if 'Hurricane' in hazard or 'Tropical Storm' in hazard:
         return "Hurricane/TropicalStorm"
-    
+    # 4. General Stormy Weather includes Tornados
     if ('Tornado' in hazard or 
         'Severe Storm' in hazard or 
         'Thunder Storm' in hazard or 
@@ -151,7 +152,7 @@ def hazard_broad_reclass(hazard):
         'Flooding' in hazard or
         'Lightning' in hazard): 
         return "GeneralStorm"
-    
+    # 5. Unclassified (e.g. fog)
     else:
         return "Unclassified"
 
@@ -165,7 +166,9 @@ reclass = claims_noHugo[['Hazard', 'hazard_broad']].drop_duplicates()
 unclass_claims = claims_noHugo['PropertyDmg(ADJ)'][claims_noHugo['hazard_broad'] == 'Unclassified'].sum()
 unclass_perc = unclass_claims/total_dollars * 100
 
-# %% 6.0 Plot the distributions of disasters.
+del unclass_claims, unclass_perc, reclass
+
+# %% 6.0 Plot the distributions of disasters by type.
 
 winter_weather = claims_noHugo[claims_noHugo['hazard_broad'] == 'WinterWeather'].copy()
 drought_heat_wildfire = claims_noHugo[claims_noHugo['hazard_broad'] == 'Drought/Heat/Wildfire'].copy()
@@ -175,7 +178,7 @@ generalstorms = claims_noHugo[claims_noHugo['hazard_broad'] == "GeneralStorm"].c
 
 fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(12,10))
 
-colors = ['cyan', 'orange', 'blue', 'green']
+colors = ['magenta', 'orange', 'navy', 'mediumseagreen']
 
 axs[0, 0].hist(winter_weather['PropertyDmg(ADJ)']/1e6, bins=15, alpha = 0.7, color=colors[0], edgecolor='black')
 axs[0, 0].set_yscale('log')
@@ -203,8 +206,20 @@ fig.supylabel('Occurances of claims (log scale)')
 plt.tight_layout()
 plt.show()
 
+# %% 6.1 distribution across all hazards. 
 
-# %% 6.1 Will the plots look better if the x-axis is rescaled log?
+fig, ax = plt.subplots(figsize=(8, 8))
+
+ax.hist(claims_noHugo['PropertyDmg(ADJ)'], bins=50, color='skyblue', alpha=0.5, edgecolor='black')
+ax.set_yscale('log')
+ax.set_ylabel('Occurance of claim value (log scale)')
+ax.set_xlabel('Loss amount (Millions of Dollars)') 
+ax.set_title('Occurance vs Severity for all disasters (ex Hugo)')
+plt.show()
+
+# %% 6.2 Total claim dollars by claim severity??
+
+# %% 6.X Will the plots look better if the x-axis is rescaled log?
 
 # winter_weather['adj_dmg_log'] = np.log(winter_weather['PropertyDmg(ADJ)'])
 # drought_heat_wildfire['adj_dmg_log'] = np.log(drought_heat_wildfire['PropertyDmg(ADJ)'])
@@ -256,16 +271,16 @@ claims_gdf = claims_gdf.set_geometry('geometry')
 
 # %% 8.0 Make Chloropleth for all claims ex-Hugo per capita
 
+# Prepare data for plot
 gdf_temp = claims_gdf.groupby('County_FIPS').agg({
     'PropertyDmgPerCapita': 'sum',
     'CountyName': 'first',
     'geometry': 'first'
 }).reset_index()
-
-
 gdf_temp = gdf_temp.set_geometry('geometry')
 gdf_temp = gdf_temp.set_crs(counties.crs)
 
+# Render the plot
 fig, ax = plt.subplots(1, 1, figsize=(15, 20))
 
 gdf_temp.plot(column='PropertyDmgPerCapita', ax=ax, cmap='coolwarm', edgecolor='black')
@@ -288,6 +303,78 @@ ax.set_ylabel('Latitude')
 plt.show()
 
 del gdf_temp
+
+# %% 8.1 Most destructive disaster type by county
+
+gdf_temp = claims_gdf.groupby(['County_FIPS', 'hazard_broad']).agg(
+    total_dmg_adj=('PropertyDmg(ADJ)', 'sum'),
+    geometry=('geometry', 'first')
+).reset_index()
+gdf_temp = gdf_temp.set_geometry('geometry')
+gdf_temp = gdf_temp.set_crs(counties.crs)
+
+# Group by county FIPS and return the maximum damage column
+gdf_temp2 = gdf_temp.loc[gdf_temp.groupby('County_FIPS')['total_dmg_adj'].idxmax()]
+
+
+gdf_temp2['centroid'] = gdf_temp2.geometry.centroid
+
+gdf_temp2 = gpd.GeoDataFrame(gdf_temp2, geometry='centroid')
+
+# Assign the colors to hazard type for plotting
+colors = ['orange', 'mediumseagreen', 'navy', 'magenta']
+hazards = sorted(gdf_temp2['hazard_broad'].unique().tolist())
+color_map = {category: colors[i % len(colors)] for i, category in enumerate(hazards)}
+
+# Map colors to gdf
+gdf_temp2['color'] = gdf_temp2['hazard_broad'].map(color_map)
+
+fig, ax = plt.subplots(figsize=(12, 12))
+gdf_temp['geometry'].plot(ax=ax, edgecolor='black', facecolor='none')
+gdf_temp2.plot(
+    ax=ax,
+    color=gdf_temp2['color'],
+    markersize=gdf_temp2['total_dmg_adj'] / gdf_temp2['total_dmg_adj'].max() * 1000,
+    legend='True'
+)
+
+handles = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=color_map[cat], markersize=10) for cat in hazards]
+labels = hazards
+ax.legend(handles, labels, title='Hazard Type')
+ax.set_title('Most Damaging Hazard Types (1960-2022) -- Scaled by Damage Amount ($)', size=20)
+
+plt.show()
+
+# %% 8.2 Make a stacked barplot
+
+grouped = claims_gdf.groupby(['CountyName', 'hazard_broad'])['PropertyDmgPerCapita'].sum().unstack()
+grouped.drop(columns=['Unclassified'], inplace=True)
+
+grouped['Total'] = grouped.sum(axis=1)
+
+# Sort the DataFrame by the 'Total' column in descending order
+grouped = grouped.sort_values(by='Total', ascending=False)
+
+# Drop the 'Total' column after sorting
+grouped = grouped.drop(columns=['Total'])
+
+
+bar_colors = [color_map[hazard] for hazard in grouped.columns]
+
+# Plotting
+fig, ax = plt.subplots(figsize=(18, 12))
+grouped.plot(kind='bar', stacked=True, ax=ax, color=bar_colors, edgecolor='black')
+
+# Adding labels and title
+plt.xlabel('County Name', fontsize=16)
+for tick in ax.get_xticklabels():
+    tick.set_fontweight('bold')
+    tick.set_fontsize(12)
+plt.ylabel('Total Property Damage Per Capita', fontsize=20)
+plt.title('Property Damage by Hazard and County', fontsize=24)
+plt.legend(title='Hazard Type')
+plt.show()
+
 
 # %% 8.1 Compare the per-capita claims (1960-1991 vs 1992-2022)
 
@@ -398,7 +485,7 @@ gdf_temp1 = gdf_temp1.groupby('County_FIPS').agg({
 gdf_temp1 = gdf_temp1.set_geometry('geometry')
 gdf_temp1 = gdf_temp1.set_crs(counties.crs)
 
-gdf_temp2 = gdf_temp[gdf_temp['Year'] > 1992]
+gdf_temp2 = gdf_temp[gdf_temp['Year'] >= 1991]
 gdf_temp2 = gdf_temp2.groupby('County_FIPS').agg({
     'PropertyDmgPerCapita': 'sum',
     'CountyName': 'first',
