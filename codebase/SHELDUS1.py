@@ -529,7 +529,9 @@ axs[1].set_ylabel('Latitude')
 
 plt.show()
 
+# %% 9.0 Write claims file for subsequent analysis
 
+claims_noHugo.to_csv('./project_data/claims_v2.csv', index=False)
 
 
 
