@@ -10,7 +10,9 @@ Created on Sat Jun  1 19:00:32 2024
 
 import pandas as pd
 import numpy as np
+import math
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 import os
 
@@ -61,7 +63,7 @@ modeling_domain = np.linspace(1, 100, num=1000)
 
 # Log 10 fits much better than numpy's ln() default
 def log_func(x, a, b):
-    return a * np.log(x) + b
+    return a * np.log10(x) + b
 
 
 def ri_model_fitting(df, ri_col, dmg_col):
@@ -114,31 +116,63 @@ plt.scatter(df_temp['RI'], df_temp['residual'], color='red', edgecolors='black')
 plt.axhline(0, color='black', linestyle='--', linewidth=1)
 plt.xlim(0, 100)
 plt.xlabel('Recurrence Interval (Years)', size=16)
-plt.ylabel('Log of Residuals', size=16)
+plt.ylabel('Log10 of Residuals', size=16)
 plt.show()
 
 # %% 2.3 Evaluate Poisson Distrubution for loss thresholds
 
 poisson_lambdas = []
 
-thresholds = [25, 50, 100]
+thresholds = [25, 50, 100, 150]
 
 for value in thresholds:
            
     modeled_RI = 10 ** ((value - params[1]) / params[0])
-    modeled50_frequency = 50 / modeled_RI
-    poisson_lambdas.append((value, modeled50_frequency))
+    modeled100_frequency = 100 / modeled_RI
+    poisson_lambdas.append((value, modeled100_frequency))
     
-    print(modeled_frequency)
+    print(modeled100_frequency)
     
-k_values = np.range(1, 10)
+results = []
 
-for l in poisson_lambdas:
+for i in poisson_lambdas:
+    lambda_value = i[1]
+    threshold = i[0]
     
+    k_values = range(1, 50)
     for k in k_values:
     
-    P = poisson_lambdas[1]
+        P = ((lambda_value ** k) * math.exp(-lambda_value)) / math.factorial(k)
+    
+        results.append({'threshold': threshold, 
+                        'Lambda': lambda_value, 
+                        'k': k, 
+                        'P': P
+                        })
 
+poission_df = pd.DataFrame(results)
+
+plt.figure(figsize=(10, 6))
+
+# Define a color map
+colors = plt.cm.YlOrRd(np.linspace(0.25, 1, len(thresholds)))
+
+for idx, threshold in enumerate(thresholds):
+    subset = poission_df[poission_df['threshold'] == threshold]
+    plt.plot(subset['k'], 
+             subset['P'], 
+             marker='o', 
+             label=f'${threshold} Million Annual Losses', 
+             color=colors[idx],
+             markersize = 5,
+             markeredgecolor='black')
+
+plt.title('Poisson Probability vs k for Different Thresholds')
+plt.xlabel('Number of excedences / 100 years')
+plt.ylabel('Poisson Probability (P)')
+plt.legend(title='Threshold')
+plt.show()
+    
 # %% 3.0 Model the RI for Per Capita Storm Damages
 modeling_domain = np.linspace(1, 100, num=1000)
 
@@ -181,12 +215,13 @@ plt.legend(loc='lower right')
 
 modeling_domain = np.linspace(1, 50, num=1000)
 
-early = storms_years_percap[storms_years_percap['Year'] < 1991]
-early = early[early['Year'] != 1984]
+storms_comp = storms_years_percap[storms_years_percap['Year'] != 1984]
+
+early = storms_comp[storms_comp['Year'] < 1991]
 early = calc_ri(early, 'Year', 'annual_dmg_percap')
 params_early, covariance_early, curve_early = ri_model_fitting(early, 'RI', 'annual_dmg_percap')
 
-late = storms_years_percap[storms_years_percap['Year'] >= 1991]
+late = storms_comp[storms_comp['Year'] >= 1991]
 late = calc_ri(late, 'Year', 'annual_dmg_percap')
 params_late, covariance_late, curve_late = ri_model_fitting(late, 'RI', 'annual_dmg_percap')
 
@@ -198,8 +233,106 @@ plt.xlabel('Return Interval')
 plt.ylabel('Per-capita inflation adjusted claims ($)')
 plt.legend(loc='lower right')
 
-# %% 6.1 
+# %% 4.2 Create early Poisson Dataframe
 
+poisson_lambdas = []
+
+thresholds = [250, 500, 750]
+
+for value in thresholds:
+           
+    modeled_RI = 10 ** ((value - params_early[1]) / params_early[0])
+    modeled50_frequency = 50 / modeled_RI
+    poisson_lambdas.append((value, modeled50_frequency))
+    
+    #print(modeled50_frequency)
+    
+results = []
+
+for i in poisson_lambdas:
+    lambda_value = i[1]
+    threshold = i[0]
+    
+    k_values = range(1, 50)
+    for k in k_values:
+    
+        P = ((lambda_value ** k) * math.exp(-lambda_value)) / math.factorial(k)
+    
+        results.append({'threshold': threshold, 
+                        'Lambda': lambda_value, 
+                        'k': k, 
+                        'P': P
+                        })
+
+poission_df_early = pd.DataFrame(results)
+
+
+# %% 4.3 Create late Poisson Dataframe
+
+poisson_lambdas = []
+
+thresholds = [250, 500, 750]
+
+for value in thresholds:
+           
+    modeled_RI = 10 ** ((value - params_late[1]) / params_late[0])
+    modeled50_frequency = 50 / modeled_RI
+    poisson_lambdas.append((value, modeled50_frequency))
+ 
+results = []
+
+for i in poisson_lambdas:
+    lambda_value = i[1]
+    threshold = i[0]
+    
+    k_values = range(1, 50)
+    for k in k_values:
+    
+        P = ((lambda_value ** k) * math.exp(-lambda_value)) / math.factorial(k)
+    
+        results.append({'threshold': threshold, 
+                        'Lambda': lambda_value, 
+                        'k': k, 
+                        'P': P
+                        })
+
+poission_df_late = pd.DataFrame(results)
+
+# %% 4.4 Plot and compare PMF functions for pre and post:
+
+fig, axs = plt.subplots(ncols=1, nrows=2, figsize=(8, 6))
+
+# Define color maps correctly
+colors_early = plt.cm.Wistia(np.linspace(0, 1, len(thresholds)))
+colors_late = plt.cm.Wistia(np.linspace(0, 1, len(thresholds)))
+
+for idx, threshold in enumerate(thresholds):
+    subset_early = poission_df_early[poission_df_early['threshold'] == threshold]
+    axs[0].plot(subset_early['k'], 
+                subset_early['P'], 
+                marker='o', 
+                label=f'${threshold} Losses', 
+                color=colors_early[idx],
+                markersize=5,
+                markeredgecolor='black')
+
+for idx, threshold in enumerate(thresholds):
+    subset_late = poission_df_late[poission_df_late['threshold'] == threshold]
+    axs[1].plot(subset_late['k'], 
+                subset_late['P'], 
+                marker='o', 
+                label=f'${threshold} Losses', 
+                color=colors_late[idx],
+                markersize=5,
+                markeredgecolor='black')
+
+# Adding a legend to each subplot
+axs[0].legend(title='Threshold (Early)')
+axs[1].legend(title='Threshold (Late)')
+
+
+plt.tight_layout()
+plt.show()
 
 
 
