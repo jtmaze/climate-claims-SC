@@ -124,7 +124,7 @@ axs[2].plot(df3['Year'], df3['PropertyDmg(ADJ)']/1e6, color='darkgreen', alpha=1
 axs[2].set_title("Excluding 1993 Drought & Hurricane Hugo")
 
 #fig.supxlabel('Year', fontsize=16)
-fig.supylabel('Claims (Millions of Dollars)', fontsize=16)
+fig.supylabel('Inflation Adjusted Claims (Millions of Dollars)', fontsize=16)
 
 plt.tight_layout()
 plt.show()
@@ -162,11 +162,20 @@ claims_noHugo['hazard_broad'] = claims_noHugo['Hazard'].apply(hazard_broad_recla
 # Check to ensure reclass as expected. 
 reclass = claims_noHugo[['Hazard', 'hazard_broad']].drop_duplicates()
 
-# See how many $ are unclassified
-unclass_claims = claims_noHugo['PropertyDmg(ADJ)'][claims_noHugo['hazard_broad'] == 'Unclassified'].sum()
-unclass_perc = unclass_claims/total_dollars * 100
+total_dollars_noHugo = claims_noHugo['PropertyDmg(ADJ)'].sum()
+hazard_categories = ['Drought/Heat/Wildfire', 'Hurricane/TropicalStorm', 'GeneralStorm', 'WinterWeather', 'Unclassified']
+percentages = {}
 
-del unclass_claims, unclass_perc, reclass
+for category in hazard_categories:
+    category_claims = claims_noHugo['PropertyDmg(ADJ)'][claims_noHugo['hazard_broad'] == category].sum()
+    category_perc = category_claims / total_dollars_noHugo * 100
+    percentages[category] = category_perc
+
+# Print the percentages
+for category, perc in percentages.items():
+    print(f'{perc:.2f} % {category}')
+
+del reclass
 
 # %% 6.0 Plot the distributions of disasters by type.
 
@@ -283,11 +292,11 @@ gdf_temp = gdf_temp.set_crs(counties.crs)
 # Render the plot
 fig, ax = plt.subplots(1, 1, figsize=(15, 20))
 
-gdf_temp.plot(column='PropertyDmgPerCapita', ax=ax, cmap='coolwarm', edgecolor='black')
+gdf_temp.plot(column='PropertyDmgPerCapita', ax=ax, cmap='Reds', edgecolor='black')
 
 cax = fig.add_axes([0.25, 0.2, 0.5, 0.03])
 sm = plt.cm.ScalarMappable(
-    cmap='coolwarm', 
+    cmap='Reds', 
     norm=plt.Normalize(vmin=gdf_temp['PropertyDmgPerCapita'].min(), 
                        vmax=gdf_temp['PropertyDmgPerCapita'].max()
                        )
@@ -296,9 +305,9 @@ sm = plt.cm.ScalarMappable(
 sm._A = []
 cbar = fig.colorbar(sm, cax=cax, orientation='horizontal')
 cbar.set_label('Inflation adjusted dollars ($)', fontsize=18)
+ax.set_xticks([])
+ax.set_yticks([])
 ax.set_title('All natural disaster claims (ex-Hugo) per-capita for SC 1960-2022', fontsize=24)
-ax.set_xlabel('Longitude')
-ax.set_ylabel('Latitude')
 
 plt.show()
 
@@ -338,6 +347,9 @@ gdf_temp2.plot(
     legend='True'
 )
 
+ax.set_xticks([])
+ax.set_yticks([])
+
 handles = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=color_map[cat], markersize=10) for cat in hazards]
 labels = hazards
 ax.legend(handles, labels, title='Hazard Type')
@@ -345,7 +357,7 @@ ax.set_title('Most Damaging Hazard Types (1960-2022) -- Scaled by Damage Amount 
 
 plt.show()
 
-# %% 8.2 Make a stacked barplot
+# %% 8.2 Make a stacked barplot for per capita
 
 grouped = claims_gdf.groupby(['CountyName', 'hazard_broad'])['PropertyDmgPerCapita'].sum().unstack()
 grouped.drop(columns=['Unclassified'], inplace=True)
@@ -362,21 +374,21 @@ grouped = grouped.drop(columns=['Total'])
 bar_colors = [color_map[hazard] for hazard in grouped.columns]
 
 # Plotting
-fig, ax = plt.subplots(figsize=(18, 12))
+fig, ax = plt.subplots(figsize=(24, 12))
 grouped.plot(kind='bar', stacked=True, ax=ax, color=bar_colors, edgecolor='black')
+
+numbered_counties = [f"{i+1}. {county}" for i, county in enumerate(grouped.index)]
 
 # Adding labels and title
 plt.xlabel('County Name', fontsize=16)
-for tick in ax.get_xticklabels():
-    tick.set_fontweight('bold')
-    tick.set_fontsize(12)
-plt.ylabel('Total Property Damage Per Capita', fontsize=20)
-plt.title('Property Damage by Hazard and County', fontsize=24)
-plt.legend(title='Hazard Type')
+ax.set_xticklabels(numbered_counties, rotation=90, ha='right', fontsize=16, fontweight='bold')
+plt.ylabel('Property Damage Per Capita (1960-2022)', fontsize=20)
+plt.title('Per-capita Damage by Hazard and County (1960-2022)', fontsize=24)
+ax.legend(handles, labels, title='Hazard Type', title_fontsize='24', fontsize='18', markerscale=2.5)
 plt.show()
 
 
-# %% 8.1 Compare the per-capita claims (1960-1991 vs 1992-2022)
+# %% 8.3 Compare the per-capita claims (1960-1991 vs 1992-2022)
 
 gdf_temp1 = claims_gdf[claims_gdf['Year'] < 1991]
 
@@ -409,15 +421,15 @@ norm = Normalize(vmin=vmin, vmax=vmax)
 
 
 # Plotting the GeoDataFrames on the respective axes
-gdf_temp1.plot(column='PropertyDmgPerCapita', ax=axs[0], cmap='coolwarm', edgecolor='black', norm=norm)
-gdf_temp2.plot(column='PropertyDmgPerCapita', ax=axs[1], cmap='coolwarm', edgecolor='black', norm=norm)
+gdf_temp1.plot(column='PropertyDmgPerCapita', ax=axs[0], cmap='Reds', edgecolor='black', norm=norm)
+gdf_temp2.plot(column='PropertyDmgPerCapita', ax=axs[1], cmap='Reds', edgecolor='black', norm=norm)
 
 # Adding titles to the subplots
 axs[0].set_title('Inflation Adjusted Property Damage Per Capita (Before 1991)', fontsize=14)
 axs[1].set_title('Inflation Adjusted Property Damage Per Capita (After 1992)', fontsize=14)
 
 # Add a color bar 
-cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap='coolwarm'), 
+cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap='Reds'), 
                     ax=axs, 
                     orientation='horizontal', 
                     fraction=0.05, 
@@ -426,49 +438,18 @@ cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap='coolwarm'),
 cbar.set_label('Inflation adjusted dollars ($)', fontsize=16)
 
 # Adding axis titles
-axs[0].set_xlabel('Longitude')
-axs[0].set_ylabel('Latitude')
-axs[1].set_xlabel('Longitude')
-axs[1].set_ylabel('Latitude')
+axs[0].set_xticks([])
+axs[0].set_yticks([])
+axs[1].set_xticks([])
+axs[1].set_yticks([])
+#axs[0].set_xlabel('Longitude')
+#axs[0].set_ylabel('Latitude')
+#axs[1].set_xlabel('Longitude')
+#axs[1].set_ylabel('Latitude')
 
 plt.show()
 
 del gdf_temp1, gdf_temp2
-
-# %% 8.2 Make Chloropleth map for Storm Damage Per Capita
-
-gdf_temp = claims_gdf[claims_gdf['hazard_broad'] == 'GeneralStorm']
-
-gdf_temp = gdf_temp.groupby('County_FIPS').agg({
-    'PropertyDmgPerCapita': 'sum',
-    'CountyName': 'first',
-    'geometry': 'first'
-}).reset_index()
-
-gdf_temp = gdf_temp.set_geometry('geometry')
-gdf_temp = gdf_temp.set_crs(counties.crs)
-
-
-fig, ax = plt.subplots(1, 1, figsize=(15, 20))
-
-gdf_temp.plot(column='PropertyDmgPerCapita', ax=ax, cmap='coolwarm', edgecolor='black')
-
-cax = fig.add_axes([0.25, 0.2, 0.5, 0.03])
-sm = plt.cm.ScalarMappable(
-    cmap='coolwarm', 
-    norm=Normalize(vmin=gdf_temp['PropertyDmgPerCapita'].min(), 
-                   vmax=gdf_temp['PropertyDmgPerCapita'].max()
-                   )
-    )
-
-sm._A = []
-cbar = fig.colorbar(sm, cax=cax, orientation='horizontal')
-cbar.set_label('Inflation adjusted dollars ($)', fontsize=16)
-ax.set_title('Per Capita General Storm Damages (inflation adjusted) for SC 1960-2022', fontsize=22)
-ax.set_xlabel('Longitude')
-ax.set_ylabel('Latitude')
-
-plt.show()
 
 # %% 8.3 Storm Damage per-capita map
 
@@ -505,15 +486,15 @@ norm = Normalize(vmin=vmin, vmax=vmax)
 
 
 # Plotting the GeoDataFrames on the respective axes
-gdf_temp1.plot(column='PropertyDmgPerCapita', ax=axs[0], cmap='coolwarm', edgecolor='black', norm=norm)
-gdf_temp2.plot(column='PropertyDmgPerCapita', ax=axs[1], cmap='coolwarm', edgecolor='black', norm=norm)
+gdf_temp1.plot(column='PropertyDmgPerCapita', ax=axs[0], cmap='Reds', edgecolor='black', norm=norm)
+gdf_temp2.plot(column='PropertyDmgPerCapita', ax=axs[1], cmap='Reds', edgecolor='black', norm=norm)
 
 # Adding titles to the subplots
-axs[0].set_title('Per Capita General Storm Damages (inflation adjusted) for SC 1960-1991', fontsize=12)
-axs[1].set_title('Per Capita General Storm Damages (inflation adjusted) for SC 1992-2022', fontsize=12)
+axs[0].set_title('Per-capita Storm Damages for SC 1960-1991', fontsize=12)
+axs[1].set_title('Per-capita Storm Damages for SC 1992-2022', fontsize=12)
 
 # Add a color bar 
-cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap='coolwarm'), 
+cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap='Reds'), 
                     ax=axs, 
                     orientation='horizontal', 
                     fraction=0.05, 
@@ -522,10 +503,11 @@ cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap='coolwarm'),
 cbar.set_label('Inflation adjusted dollars ($)', fontsize=14)
 
 # Adding axis titles
-axs[0].set_xlabel('Longitude')
-axs[0].set_ylabel('Latitude')
-axs[1].set_xlabel('Longitude')
-axs[1].set_ylabel('Latitude')
+# Adding axis titles
+axs[0].set_xticks([])
+axs[0].set_yticks([])
+axs[1].set_xticks([])
+axs[1].set_yticks([])
 
 plt.show()
 
