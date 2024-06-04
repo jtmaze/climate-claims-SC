@@ -8,13 +8,12 @@ Created on Sat Jun  1 19:00:32 2024
 
 # %% 1.0 Libraries and directories
 
+import os
 import pandas as pd
 import numpy as np
+import geopandas as gpd
 import math
 import matplotlib.pyplot as plt
-import seaborn as sns
-
-import os
 
 from scipy.optimize import curve_fit
 
@@ -93,14 +92,14 @@ delta = 1.96 * np.sqrt((a_err * np.log(modeling_domain))**2 + b_err**2)
 lower_bound = curve - delta
 upper_bound = curve + delta
 
-plt.figure(figsize=(8, 10))
+plt.figure(figsize=(5, 5))
 plt.scatter(storms_years['RI'], storms_years['total_annual_dmg'], label='Data', color='navy', edgecolor='black')
 
 # Plot the fitted log curve
-plt.plot(modeling_domain, curve, label='Fitted Curve', color='orange')
+plt.plot(modeling_domain, curve, label='Fitted Model', color='orange')
 plt.fill_between(modeling_domain, lower_bound, upper_bound, color='orange', alpha=0.25, label='95% CI')
-plt.xlabel('Recurrance Interval (Years)', size=16)
-plt.ylabel('Storm Damages (Millions of Dollars)', size=16)
+plt.xlabel('Recurrance Interval (Years)', size=12)
+plt.ylabel('Annual Storm Damages (Millions of Dollars)', size=10)
 plt.legend(loc='lower right')
 plt.show()
 
@@ -109,21 +108,22 @@ plt.show()
 storms_years['fitted'] = log_func(storms_years['RI'], params[0], params[1])
 storms_years['residual'] = np.log10(storms_years['total_annual_dmg']) - np.log10(storms_years['fitted'])
 
-plt.figure(figsize=(8, 10))
+plt.figure(figsize=(5, 5))
 # Residuals are really bizare for low RI storms
 df_temp = storms_years[storms_years['RI'] > 1.5]
 plt.scatter(df_temp['RI'], df_temp['residual'], color='red', edgecolors='black')
 plt.axhline(0, color='black', linestyle='--', linewidth=1)
-plt.xlim(0, 100)
-plt.xlabel('Recurrence Interval (Years)', size=16)
-plt.ylabel('Log10 of Residuals', size=16)
+plt.xlim(0, 65)
+plt.xlabel('Recurrence Interval (Years)', size=14)
+plt.ylabel('Log10 of Residuals', size=10)
 plt.show()
 
 # %% 2.3 Evaluate Poisson Distrubution for loss thresholds
 
 poisson_lambdas = []
 
-thresholds = [25, 50, 100, 150]
+thresholds = [25, 50, 75, 100, 150]
+#thresholds = [75]
 
 for value in thresholds:
            
@@ -155,7 +155,7 @@ poission_df = pd.DataFrame(results)
 plt.figure(figsize=(10, 6))
 
 # Define a color map
-colors = plt.cm.YlOrRd(np.linspace(0.25, 1, len(thresholds)))
+colors = plt.cm.viridis(np.linspace(0, 1, len(thresholds)))
 
 for idx, threshold in enumerate(thresholds):
     subset = poission_df[poission_df['threshold'] == threshold]
@@ -164,10 +164,11 @@ for idx, threshold in enumerate(thresholds):
              marker='o', 
              label=f'${threshold} Million Annual Losses', 
              color=colors[idx],
+             linewidth=3,
              markersize = 5,
              markeredgecolor='black')
-
-plt.title('Poisson Probability vs k for Different Thresholds')
+plt.xlim(0, 50)
+plt.title('Poisson Probability')
 plt.xlabel('Number of excedences / 100 years')
 plt.ylabel('Poisson Probability (P)')
 plt.legend(title='Threshold')
@@ -203,12 +204,13 @@ late = storms_years_percap[storms_years_percap['Year'] >= 1991]
 late = calc_ri(late, 'Year', 'annual_dmg_percap')
 params_late, covariance_late, curve_late = ri_model_fitting(late, 'RI', 'annual_dmg_percap')
 
-plt.plot(modeling_domain, curve_early, label='pre-1991 model', color ='skyblue')
-plt.plot(modeling_domain, curve_late, label='post-1991 model', color='orangered')
-plt.scatter(early['RI'], early['annual_dmg_percap'], label='Pre-1991 data', color='blue')
-plt.scatter(late['RI'], late['annual_dmg_percap'], label='Post-1991 data', color='orangered')
+plt.plot(modeling_domain, curve_early, label='1960-1991 model', color ='skyblue')
+plt.plot(modeling_domain, curve_late, label='1992-2022 model', color='orangered')
+plt.scatter(early['RI'], early['annual_dmg_percap'], label='1960-1991 data', color='blue', edgecolor='black')
+plt.scatter(late['RI'], late['annual_dmg_percap'], label='1992-2022 data', color='orangered', edgecolor='black')
 plt.xlabel('Return Interval')
-plt.ylabel('Per-capita inflation adjusted claims ($)')
+plt.title('1984 Outlier Included')
+plt.ylabel('Per-capita annual claims ($)')
 plt.legend(loc='lower right')
 
 # %% 4.1 Remove the outlier value from 1984
@@ -225,25 +227,26 @@ late = storms_comp[storms_comp['Year'] >= 1991]
 late = calc_ri(late, 'Year', 'annual_dmg_percap')
 params_late, covariance_late, curve_late = ri_model_fitting(late, 'RI', 'annual_dmg_percap')
 
-plt.plot(modeling_domain, curve_early, label='pre-1991 model', color ='skyblue')
-plt.plot(modeling_domain, curve_late, label='post-1991 model', color='orangered')
-plt.scatter(early['RI'], early['annual_dmg_percap'], label='Pre-1991 data', color='blue')
-plt.scatter(late['RI'], late['annual_dmg_percap'], label='Post-1991 data', color='orangered')
+plt.plot(modeling_domain, curve_early, label='1960-1991 model', color ='skyblue')
+plt.plot(modeling_domain, curve_late, label='1992-2022 model', color='orangered')
+plt.scatter(early['RI'], early['annual_dmg_percap'], label='1960-1991 data', color='blue', edgecolor='black')
+plt.scatter(late['RI'], late['annual_dmg_percap'], label='1992-2022 data', color='orangered', edgecolor='black')
 plt.xlabel('Return Interval')
-plt.ylabel('Per-capita inflation adjusted claims ($)')
+plt.ylabel('Per-capita annual claims ($)')
+plt.title('1984 Outlier Removed')
 plt.legend(loc='lower right')
 
 # %% 4.2 Create early Poisson Dataframe
 
 poisson_lambdas = []
 
-thresholds = [250, 500, 750]
+thresholds = [250, 500, 750, 1000]
 
 for value in thresholds:
            
     modeled_RI = 10 ** ((value - params_early[1]) / params_early[0])
-    modeled50_frequency = 50 / modeled_RI
-    poisson_lambdas.append((value, modeled50_frequency))
+    modeled100_frequency = 100 / modeled_RI
+    poisson_lambdas.append((value, modeled100_frequency))
     
     #print(modeled50_frequency)
     
@@ -253,7 +256,7 @@ for i in poisson_lambdas:
     lambda_value = i[1]
     threshold = i[0]
     
-    k_values = range(1, 50)
+    k_values = range(1, 80)
     for k in k_values:
     
         P = ((lambda_value ** k) * math.exp(-lambda_value)) / math.factorial(k)
@@ -271,13 +274,13 @@ poission_df_early = pd.DataFrame(results)
 
 poisson_lambdas = []
 
-thresholds = [250, 500, 750]
+thresholds = [250, 500, 750, 1000]
 
 for value in thresholds:
            
     modeled_RI = 10 ** ((value - params_late[1]) / params_late[0])
-    modeled50_frequency = 50 / modeled_RI
-    poisson_lambdas.append((value, modeled50_frequency))
+    modeled100_frequency = 100 / modeled_RI
+    poisson_lambdas.append((value, modeled100_frequency))
  
 results = []
 
@@ -285,7 +288,7 @@ for i in poisson_lambdas:
     lambda_value = i[1]
     threshold = i[0]
     
-    k_values = range(1, 50)
+    k_values = range(1, 80)
     for k in k_values:
     
         P = ((lambda_value ** k) * math.exp(-lambda_value)) / math.factorial(k)
@@ -311,9 +314,10 @@ for idx, threshold in enumerate(thresholds):
     axs[0].plot(subset_early['k'], 
                 subset_early['P'], 
                 marker='o', 
-                label=f'${threshold} Losses', 
+                label=f'${threshold} Per-capita Losses', 
                 color=colors_early[idx],
                 markersize=5,
+                linewidth=3,
                 markeredgecolor='black')
 
 for idx, threshold in enumerate(thresholds):
@@ -321,14 +325,26 @@ for idx, threshold in enumerate(thresholds):
     axs[1].plot(subset_late['k'], 
                 subset_late['P'], 
                 marker='o', 
-                label=f'${threshold} Losses', 
+                label=f'${threshold} Per-capita Losses', 
                 color=colors_late[idx],
                 markersize=5,
+                linewidth=3,
                 markeredgecolor='black')
 
 # Adding a legend to each subplot
-axs[0].legend(title='Threshold (Early)')
-axs[1].legend(title='Threshold (Late)')
+axs[0].legend(title='Thresholds')
+
+#axs[0].set_xlabel('Number of excedences / 100 years')
+axs[0].set_ylabel('Poisson Probability')
+axs[1].set_xlabel('Number of excedences / 100 years')
+axs[1].set_ylabel('Poisson Probability')
+
+axs[0].set_ylim(0,.25)
+axs[1].set_ylim(0,.25)
+
+axs[0].set_title('Historic (1960-1991)')
+axs[1].set_title('Modern (1992-2022)')
+
 
 
 plt.tight_layout()

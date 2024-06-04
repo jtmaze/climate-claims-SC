@@ -134,16 +134,13 @@ del claims2, claims3, df, df2, df3
 # %% 5.0 Recatagorize the Hazard types
 
 def hazard_broad_reclass(hazard):
-    # 1. Winter Weather (e.g. Ice Storms) also includes some storm damage in neighboring counties.
-    if 'Winter Weather' in hazard:
-        return "WinterWeather"
-    # 2. Heat, Drought and Wildfire
+    # 1. Heat, Drought and Wildfire
     if 'Heat' in hazard or 'Drought' in hazard or 'Wildfire' in hazard:
         return "Drought/Heat/Wildfire"
-    # 3. Hurricanes and Tropical Storms
+    # 2. Hurricanes and Tropical Storms
     if 'Hurricane' in hazard or 'Tropical Storm' in hazard:
         return "Hurricane/TropicalStorm"
-    # 4. General Stormy Weather includes Tornados
+    # 3. General Stormy Weather includes Tornados
     if ('Tornado' in hazard or 
         'Severe Storm' in hazard or 
         'Thunder Storm' in hazard or 
@@ -152,9 +149,14 @@ def hazard_broad_reclass(hazard):
         'Flooding' in hazard or
         'Lightning' in hazard): 
         return "GeneralStorm"
+    # 4. Winter Weather
+    if 'Winter Weather' in hazard:
+        return "WinterWeather"
     # 5. Unclassified (e.g. fog)
     else:
         return "Unclassified"
+    
+
 
 
 claims_noHugo['hazard_broad'] = claims_noHugo['Hazard'].apply(hazard_broad_reclass)
